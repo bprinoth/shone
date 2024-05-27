@@ -58,6 +58,7 @@ class FastchemWrapper:
         pressure,
         metallicity=1,
         c_to_o_ratio=1,
+        ti_to_h_ratio=1,
         elemental_abundances_path=None,
         fit_coefficients_path=None
     ):
@@ -80,6 +81,7 @@ class FastchemWrapper:
         self.pressure = pressure
         self.metallicity = metallicity
         self.c_to_o_ratio = c_to_o_ratio
+        self.ti_to_h_ratio = ti_to_h_ratio
 
         if elemental_abundances_path is None:
             elemental_abundances_path = os.path.join(
@@ -132,6 +134,15 @@ class FastchemWrapper:
             abundances_with_metallicity[index_C] = (
                 abundances_with_metallicity[index_O] * self.c_to_o_ratio
             )
+            
+        if self.ti_to_h_ratio is not None:
+            index_Ti = self.fastchem.getElementIndex('Ti')
+            index_H = self.fastchem.getElementIndex('H')
+            
+            abundances_with_metallicity[index_Ti] = (
+                abundances_with_metallicity[index_H] * self.ti_to_h_ratio
+            )
+            
 
         self.fastchem.setElementAbundances(abundances_with_metallicity)
 
@@ -145,6 +156,8 @@ class FastchemWrapper:
         bar_to_cgs = 1e6  # [dyn / bar]
         gas_number_density = bar_to_cgs * self.pressure / (k_B * self.temperature)  # [cm-3]
         vmr = n_densities / gas_number_density[:, None]
+        
+        self.MMW = output_data.mean_molecular_weight
 
         return vmr
 
@@ -235,7 +248,7 @@ def round_in_log(x):
 def build_fastchem_grid(
     temperature=None, pressure=None,
     log_m_to_h=None, log_c_to_o=None,
-    n_species=523
+    log_ti_to_h=None, n_species=523
 ):
     """
     Pre-compute a grid of equilibrium chemistry solutions from FastChem.
@@ -252,7 +265,13 @@ def build_fastchem_grid(
     log_m_to_h : array-like
         Metallicity grid. Default is log-spaced from -1 to 3.
     log_c_to_o : array-like
+<<<<<<< Updated upstream
         C/O grid. Default is log-spaced from -1 to 2.
+=======
+        C/O grid.
+    log_ti_to_h : array-like
+        Ti/H grid.
+>>>>>>> Stashed changes
     n_species : int
         Number of species in this FastChem computation.
 
@@ -260,7 +279,7 @@ def build_fastchem_grid(
     -------
     ds : `~xarray.Dataset`
         Dataset containing the 5D fastchem grid over temperature,
-        pressure, metallicity, C/O, and species.
+        pressure, metallicity, C/O, Ti/H and species.
     """
     if temperature is None:
         temperature = np.round(np.geomspace(300, 6000, 22), -1)
@@ -270,10 +289,12 @@ def build_fastchem_grid(
         log_m_to_h = np.linspace(-1, 3, 11)
     if log_c_to_o is None:
         log_c_to_o = np.linspace(-1, 2, 16)
+    if log_ti_to_h is None:
+        log_ti_to_h = np.linspace(-1, 2, 16)
 
     shape = (
         pressure.size, temperature.size,
-        log_m_to_h.size, log_c_to_o.size,
+        log_m_to_h.size, log_c_to_o.size, log_ti_to_h.size, 
         n_species
     )
 
@@ -287,17 +308,27 @@ def build_fastchem_grid(
         desc="Pre-computing FastChem grid"
     ):
         for j, log_co in enumerate(log_c_to_o):
-            chem2d = FastchemWrapper(
-                temperature2d.ravel(), pressure2d.ravel(),
-                metallicity=10 ** log_mh,
-                c_to_o_ratio=10 ** log_co
-            )
+            
+            for k, log_tih in enumerate(log_ti_to_h):
+                chem2d = FastchemWrapper(
+                    temperature2d.ravel(), pressure2d.ravel(),
+                    metallicity=10 ** log_mh,
+                    c_to_o_ratio=10 ** log_co,
+                    ti_to_h_ratio=10 ** log_tih
+                )
 
+<<<<<<< Updated upstream
             mmr_mmw = chem2d.mmr_mmw().reshape((*pressure2d.shape, n_species))
             vmr = chem2d.vmr().reshape((*pressure2d.shape, n_species))
 
             results_mmr[:, :, i, j, :] = mmr_mmw
             results_vmr[:, :, i, j, :] = vmr
+=======
+                mmr_mmw = chem2d.mmr_mmw().reshape((*pressure2d.shape, n_species))
+                mmw = chem2d.MMW
+                
+                results[:, :, i, j, k, :] = mmr_mmw
+>>>>>>> Stashed changes
 
     species_table = chem2d.get_species()
 
@@ -305,15 +336,24 @@ def build_fastchem_grid(
 
     ds = xr.Dataset(
         data_vars=dict(
+<<<<<<< Updated upstream
             mmr_mmw=(coord_names, results_mmr),
             vmr=(coord_names, results_vmr)
+=======
+            mmr_mmw=(
+                "pressure temperature log_m_to_h log_c_to_o log_ti_to_h species".split(),
+                results
+            )
+>>>>>>> Stashed changes
         ),
         coords=dict(
             temperature=temperature,
             pressure=pressure,
             log_m_to_h=log_m_to_h,
             log_c_to_o=log_c_to_o,
+            log_ti_to_h=log_ti_to_h,
             species=list(species_table['symbol']),
+            mmws=mmws
         ),
         attrs={str(idx): symbol for idx, symbol in species_table[['index', 'symbol']]}
     )
