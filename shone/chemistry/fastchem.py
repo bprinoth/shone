@@ -19,7 +19,6 @@ from shone.config import shone_dir
 from shone.constants import bar_to_dyn_cm2, k_B
 from shone.chemistry.translate import species_name_to_fastchem_name
 
-fastchem_grid_filename = 'fastchem_grid.nc'
 
 __all__ = [
     'FastchemWrapper',
@@ -31,6 +30,8 @@ __all__ = [
     'mean_molecular_weight',
 ]
 
+
+fastchem_grid_filename = 'fastchem_grid.nc'
 cached_species_table = None
 
 
@@ -502,6 +503,7 @@ def number_density(temperature, pressure):
 
 
 def mass_density(temperature, pressure, vmr):
+    # [AMU / cm3]
     species_table = fastchem_species_table()
     n_total = number_density(temperature, pressure)
     rho = jnp.sum(

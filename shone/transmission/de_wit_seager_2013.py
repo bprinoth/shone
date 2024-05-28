@@ -180,16 +180,6 @@ def transmission_radius(
     .. [1] `de Wit, J. & Seager, S. 2013, Science, 342, 1473. doi:10.1126/science.1245450
            <https://ui.adsabs.harvard.edu/abs/2013Sci...342.1473D/abstract>`_
     """
-    # validate inputs to avoid nonsense:
-    assert isinstance(absorption, bool), (
-        f"`{absorption=}` argument must be "
-        f"boolean; got type {type(absorption)}."
-    )
-    assert isinstance(rayleigh_scattering, bool), (
-        f"`{rayleigh_scattering=}` argument must be "
-        f"boolean; got type {type(rayleigh_scattering)}."
-    )
-
     # compute number densities of all species and for scattering species:
     mmw = mean_molecular_weight(temperature, pressure, vmr)
     n_total = number_density(temperature, pressure)
