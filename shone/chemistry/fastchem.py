@@ -82,6 +82,7 @@ class FastchemWrapper:
         metallicity=1,
         c_to_o_ratio=0.5888,
         ti_to_h_ratio=9.33e-08,
+        na_to_h_ratio=1.6595869074375596e-06, # solar abundance
         elemental_abundances_path=None,
         fit_coefficients_path=None,
         quiet=False
@@ -118,6 +119,7 @@ class FastchemWrapper:
         self.metallicity = metallicity
         self.c_to_o_ratio = c_to_o_ratio
         self.ti_to_h_ratio = ti_to_h_ratio
+        self.na_to_h_ratio = na_to_h_ratio
 
         if elemental_abundances_path is None:
             elemental_abundances_path = os.path.join(
@@ -177,6 +179,14 @@ class FastchemWrapper:
 
             abundances_with_metallicity[index_Ti] = (
                 abundances_with_metallicity[index_H] * self.ti_to_h_ratio
+            )
+            
+        if self.na_to_h_ratio is not None:
+            index_Na = self.fastchem.getElementIndex('Na')
+            index_H = self.fastchem.getElementIndex('H')
+
+            abundances_with_metallicity[index_Na] = (
+                abundances_with_metallicity[index_H] * self.na_to_h_ratio
             )
 
         self.fastchem.setElementAbundances(abundances_with_metallicity)
@@ -293,7 +303,7 @@ def round_in_log(x):
 def build_fastchem_grid(
     temperature=None, pressure=None,
     log_m_to_h=None, log_c_to_o=None,
-    log_ti_to_h=None,
+    log_ti_to_h=None, log_na_to_h=None,
     n_species=523
 ):
     """
@@ -330,12 +340,14 @@ def build_fastchem_grid(
     if log_c_to_o is None:
         log_c_to_o = np.linspace(-1, 0.3, 16)
     if log_ti_to_h is None:
-        log_ti_to_h = np.linspace(-8, -6, 16)
+        log_ti_to_h = np.array([-7.03])
+    if log_na_to_h is None:
+        log_na_to_h = np.array([-5.78])
 
     shape = (
         pressure.size, temperature.size,
         log_m_to_h.size, log_c_to_o.size,
-        log_ti_to_h.size,
+        log_ti_to_h.size, log_na_to_h.size,
         n_species
     )
 
@@ -351,23 +363,25 @@ def build_fastchem_grid(
         for j, log_co in enumerate(log_c_to_o):
             
             for k, log_tih in enumerate(log_ti_to_h):
-                chem2d = FastchemWrapper(
-                    temperature2d.ravel(), pressure2d.ravel(),
-                    metallicity=10 ** log_mh,
-                    c_to_o_ratio=10 ** log_co,
-                    ti_to_h_ratio=10 ** log_tih
-                    
-                )
+                
+                for l, log_nah in enumerate(log_na_to_h):
+                    chem2d = FastchemWrapper(
+                        temperature2d.ravel(), pressure2d.ravel(),
+                        metallicity=10 ** log_mh,
+                        c_to_o_ratio=10 ** log_co,
+                        ti_to_h_ratio=10 ** log_tih,
+                        na_to_h_ratio=10 ** log_nah   
+                    )
 
-                mmr_mmw = chem2d.mmr_mmw().reshape((*pressure2d.shape, n_species))
-                vmr = chem2d.vmr().reshape((*pressure2d.shape, n_species))
+                    mmr_mmw = chem2d.mmr_mmw().reshape((*pressure2d.shape, n_species))
+                    vmr = chem2d.vmr().reshape((*pressure2d.shape, n_species))
 
-                results_mmr[:, :, i, j, k, :] = mmr_mmw
-                results_vmr[:, :, i, j, k, :] = vmr
+                    results_mmr[:, :, i, j, k, l, :] = mmr_mmw
+                    results_vmr[:, :, i, j, k, l, :] = vmr
 
     species_table = chem2d.get_species()
 
-    coord_names = "pressure temperature log_m_to_h log_c_to_o log_ti_to_h species".split()
+    coord_names = "pressure temperature log_m_to_h log_c_to_o log_ti_to_h log_na_to_h species".split()
 
     ds = xr.Dataset(
         data_vars=dict(
@@ -380,6 +394,7 @@ def build_fastchem_grid(
             log_m_to_h=log_m_to_h,
             log_c_to_o=log_c_to_o,
             log_ti_to_h=log_ti_to_h,
+            log_na_to_h=log_na_to_h,
             species=list(species_table['symbol']),
         ),
         attrs={str(idx): symbol for idx, symbol in species_table[['index', 'symbol']]}
@@ -416,13 +431,14 @@ def get_fastchem_interpolator(path=None):
         jnp.float32(grid.temperature.to_numpy()),
         jnp.float32(grid.log_m_to_h.to_numpy()),
         jnp.float32(grid.log_c_to_o.to_numpy()),
-        jnp.float32(grid.log_ti_to_h.to_numpy())
+        jnp.float32(grid.log_ti_to_h.to_numpy()),
+        jnp.float32(grid.log_na_to_h.to_numpy())
     )
 
     @partial(jit, static_argnames=('grid',))
     def interp(
         temperature, pressure, log_m_to_h, log_c_to_o,
-        log_ti_to_h, grid=grid.to_numpy().astype(np.float32)
+        log_ti_to_h, log_na_to_h, grid=grid.to_numpy().astype(np.float32)
     ):
         """
         Parameters
@@ -442,6 +458,7 @@ def get_fastchem_interpolator(path=None):
             jnp.broadcast_to(log_m_to_h, temperature.shape),
             jnp.broadcast_to(log_c_to_o, temperature.shape),
             jnp.broadcast_to(log_ti_to_h, temperature.shape),
+            jnp.broadcast_to(log_na_to_h, temperature.shape)
         ]).astype(jnp.float32)
 
         return nd_interp(
