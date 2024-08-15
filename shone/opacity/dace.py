@@ -208,7 +208,7 @@ def get_opacity_dir_path_atom(atom, linelist):
     if not os.path.exists('tmp'):
         raise ValueError("Expected a temporary opacity directory, none found.")
 
-    find_e2b = glob(os.path.join('tmp', atom + '__' + linelist + "*e3b"))
+    find_e2b = glob(os.path.join('tmp', atom + '__' + linelist + "*e2b"))
     if len(find_e2b):
         return find_e2b[0]
     find = glob(os.path.join('tmp', atom + '__' + linelist + "*"))
